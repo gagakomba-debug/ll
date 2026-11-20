@@ -76,7 +76,7 @@ section{padding:3.6rem 0}
 .reveal.in{opacity:1;transform:none}
 
 /* ---------- enveloppe d'ouverture ---------- */
-#envelope{position:fixed;inset:0;z-index:100;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at center,#5a3352,var(--black) 75%);transition:opacity .9s,visibility .9s}
+#envelope{cursor:pointer;position:fixed;inset:0;z-index:100;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at center,#5a3352,var(--black) 75%);transition:opacity .9s,visibility .9s}
 #envelope.gone{opacity:0;visibility:hidden}
 .env-scene{display:flex;flex-direction:column;align-items:center;gap:2rem;perspective:1200px}
 .env{position:relative;width:min(360px,86vw);aspect-ratio:1/.86;transition:transform 1s ease}
@@ -275,9 +275,11 @@ footer small{display:block;font-size:.72rem;color:#b9a6b6;margin-top:.8rem}
   opacity:0;pointer-events:none;transform:translateX(8px);transition:.4s}
 #musicHint.on{opacity:1;pointer-events:auto;transform:none;animation:hintPulse 1.8s ease-in-out infinite}
 @keyframes hintPulse{50%{transform:scale(1.05)}}
-#musicBtn.off:not(.user){animation:hintPulse 1.8s ease-in-out infinite}
+#musicBtn.off:not(.user){}
 @media print{#musicHint{display:none!important}}
-#musicBtn.float{position:fixed;top:max(1rem,env(safe-area-inset-top));right:1.2rem;z-index:101}
+#musicBtn.float{position:fixed;top:max(1rem,env(safe-area-inset-top));right:1.2rem;z-index:101;opacity:0;pointer-events:none}
+body.opened #musicBtn.float{opacity:1;pointer-events:auto}
+#musicHint{display:none!important}
 #musicBtn .eq{display:flex;align-items:flex-end;gap:2px;height:16px}
 #musicBtn .eq i{width:3px;background:currentColor;border-radius:2px;height:30%;animation:eq 1s ease-in-out infinite}
 #musicBtn .eq i:nth-child(2){animation-delay:.25s}#musicBtn .eq i:nth-child(3){animation-delay:.5s}#musicBtn .eq i:nth-child(4){animation-delay:.15s}
@@ -503,7 +505,7 @@ footer{padding-bottom:2rem}
       <div class="e-names">Jaelle <span>&</span> Joursaint</div>
     </div>
     <button class="btn btn-open" id="openBtn">Ouvrir l'invitation</button>
-    <div class="env-hint">Touchez le sceau pour ouvrir</div>
+    <div class="env-hint">Touchez l'écran pour ouvrir</div>
   </div>
 </div>
 
@@ -805,7 +807,7 @@ try{const d=bgm.getAttribute("src");if(d&&d.startsWith("data:")){const b64=atob(
   for(let i=0;i<b64.length;i++)u8[i]=b64.charCodeAt(i);bgm.src=URL.createObjectURL(new Blob([u8],{type:"audio/mpeg"}));bgm.load()}}catch(_){}
 bgm.setAttribute("playsinline","");
 function fadeTo(v,ms){clearInterval(fadeT);const st=bgm.volume,t0=Date.now();fadeT=setInterval(()=>{const k=Math.min(1,(Date.now()-t0)/ms);bgm.volume=st+(v-st)*k;if(k>=1){clearInterval(fadeT);if(v===0)bgm.pause()}},50)}
-function musicPlay(){musicWanted=true;bgm.volume=0;const pr=bgm.play();if(pr)pr.then(()=>{musicOn=true;$("#musicBtn").classList.remove("off");$("#musicHint").classList.remove("on");fadeTo(.55,2500)}).catch(()=>{musicOn=false;$("#musicBtn").classList.add("off")})}
+function musicPlay(){musicWanted=true;bgm.volume=0;const pr=bgm.play();if(pr)pr.then(()=>{musicOn=true;$("#musicBtn").classList.remove("off","pulse");$("#musicHint").classList.remove("on");fadeTo(.55,2500)}).catch(()=>{musicOn=false;$("#musicBtn").classList.add("off")})}
 function musicStop(){musicOn=false;musicWanted=false;$("#musicHint").classList.remove("on");$("#musicBtn").classList.add("user");$("#musicBtn").classList.add("off");fadeTo(0,700)}
 $("#musicHint").onclick=()=>musicPlay();
 $("#musicBtn").onclick=()=>{if(musicOn){musicStop();$("#musicBtn").setAttribute("aria-label","Mettre la musique")}else{musicPlay();$("#musicBtn").setAttribute("aria-label","Couper la musique")}};
@@ -814,17 +816,18 @@ document.addEventListener("visibilitychange",()=>{if(document.hidden){if(musicOn
    si le téléphone bloque le son automatique, elle démarre au tout premier toucher de l'écran */
 let musicWanted=!inFrame;
 function tryAutoplay(){if(!musicWanted||musicOn)return;bgm.volume=0;const pr=bgm.play();
-  if(pr)pr.then(()=>{musicOn=true;$("#musicBtn").classList.remove("off");$("#musicHint").classList.remove("on");fadeTo(.55,2500);unlockOff()}).catch(()=>{$("#musicHint").classList.add("on")})}
+  if(pr)pr.then(()=>{musicOn=true;$("#musicBtn").classList.remove("off");$("#musicHint").classList.remove("on");fadeTo(.55,2500);unlockOff()}).catch(()=>{})}
 const unlockEv=["touchend","pointerup","click","keydown"];
 function unlock(){if(musicWanted&&!musicOn)tryAutoplay()}
 function unlockOff(){unlockEv.forEach(ev=>document.removeEventListener(ev,unlock,true))}
-if(!inFrame){unlockEv.forEach(ev=>document.addEventListener(ev,unlock,{capture:true,passive:true}));tryAutoplay()}
-else $("#musicBtn").classList.add("off");
+/* la musique démarre uniquement quand l'invité ouvre l'invitation */
 function openInvitation(){
-  if(!inFrame&&!musicOn&&musicWanted)tryAutoplay();const e=$("#envelope");if(e.classList.contains("opening"))return;
+  if(!inFrame&&!musicOn&&musicWanted)musicPlay();const e=$("#envelope");if(e.classList.contains("opening"))return;
   e.classList.add("opening");setTimeout(()=>e.classList.add("pulled"),800);setTimeout(()=>e.classList.add("zoom"),2000);
   setTimeout(()=>{e.classList.add("gone");document.body.style.overflow="";document.body.classList.add("opened");startFlowers()},2600)}
-$("#openBtn").onclick=openInvitation;$("#seal").onclick=openInvitation;
+$("#openBtn").onclick=openInvitation;
+/* toucher n'importe où sur l'écran d'accueil = ouvrir l'invitation + lancer la musique */
+$("#envelope").addEventListener("click",e=>{if(!e.target.closest("#musicBtn,#musicHint"))openInvitation()});$("#seal").onclick=openInvitation;
 
 /* menu */
 addEventListener("scroll",()=>$("#top").classList.toggle("scrolled",scrollY>innerHeight*.6),{passive:true});
