@@ -389,9 +389,11 @@ body.opened .hero-txt>*:nth-child(4){transition-delay:.75s}
 .inv.v3 .k1{margin-top:0}
 .inv.v3 .caps{font-size:1.65cqw;letter-spacing:.16em;line-height:1.6}
 .inv.v3 .it{font-size:2cqw;line-height:1.5}
-.inv.v3 .nm{font-size:7cqw;margin-top:.6cqw}
+.inv.v3 .nm{font-size:7cqw;margin-top:.2cqw;line-height:1.25;margin-bottom:-.9cqw}
 .inv.v3 .et{font-size:2.3cqw;gap:2cqw;margin:0}
-.inv.v3 .et::before,.inv.v3 .et::after{width:10cqw}
+.inv.v3 .et::before,.inv.v3 .et::after{content:none;display:none}
+.inv .et .etl{display:block;width:10cqw;height:.25cqw;background:#c98a93;opacity:.7}
+.inv .et span{display:block;line-height:1.3}
 .inv.v3 .vows{font-size:1.55cqw;margin-top:1cqw;line-height:1.55}
 .inv.v3 .date{width:46cqw;margin-top:1.4cqw}
 .inv.v3 .date .side{margin-top:2cqw;padding-bottom:1cqw}
@@ -648,7 +650,7 @@ footer{padding-bottom:2rem}
         <div class="it k1" id="invPhrase2">Vous êtes cordialement invités</div>
         <div class="it">à célébrer le mariage de</div>
         <div class="nm">Jaelle</div>
-        <div class="et">et</div>
+        <div class="et"><i class="etl"></i><span>et</span><i class="etl"></i></div>
         <div class="nm" style="margin-top:0">Joursaint</div>
         <div class="caps vows">Qui, entourés de leurs familles,<br>seront heureux de partager avec vous<br>ce jour de bonheur</div>
         <div class="date">
@@ -1030,12 +1032,53 @@ function goToMissing(){
 $("#needGo").onclick=goToMissing;
 $("#needSee").onclick=()=>{$("#needModal").classList.remove("on");document.documentElement.style.scrollBehavior="auto";scrollTo({top:$("#invitation").getBoundingClientRect().top+scrollY-70,behavior:"smooth"})};
 $("#needModal").onclick=e=>{if(e.target.id==="needModal")$("#needModal").classList.remove("on")};
+/* ===== Téléchargement direct de l'invitation en PDF ===== */
+function loadScript(src){return new Promise((ok,ko)=>{const sc=document.createElement("script");sc.src=src;sc.onload=ok;sc.onerror=ko;document.head.appendChild(sc)})}
+let pdfLibs=null;
+function getPdfLibs(){
+  if(!pdfLibs)pdfLibs=Promise.all([
+    window.html2canvas?1:loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
+    window.jspdf?1:loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")]).catch(e=>{pdfLibs=null;throw e});
+  return pdfLibs;
+}
+let busy=false;
+async function makePdf(){
+  if(busy)return;busy=true;fillInvite();
+  const btn=$("#dlBtn"),old=btn.innerHTML;btn.disabled=true;btn.innerHTML="⏳ Préparation de votre invitation…";
+  try{
+    await getPdfLibs();
+    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+    const card=$(".inv");card.classList.add("in");
+    const sc=Math.min(3,Math.max(2,1600/card.offsetWidth));
+    /* les prénoms (écriture calligraphiée) sont dessinés à part pour garder leur position exacte */
+    const nameImgs=[...card.querySelectorAll(".nm")].map(el=>{
+      const r=el.getBoundingClientRect(),cs=getComputedStyle(el),mk=document.createElement("span");
+      mk.style.cssText="display:inline-block;width:0;height:0;vertical-align:baseline";el.appendChild(mk);
+      const base=mk.getBoundingClientRect().top-r.top;mk.remove();
+      const cv=document.createElement("canvas");cv.width=Math.ceil(r.width*sc);cv.height=Math.ceil(r.height*sc);
+      const cx=cv.getContext("2d");cx.scale(sc,sc);cx.font=`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      cx.fillStyle=cs.color;cx.textAlign="center";cx.textBaseline="alphabetic";cx.fillText(el.textContent.trim(),r.width/2,base);
+      return {src:cv.toDataURL("image/png"),w:r.width,h:r.height}});
+    const canvas=await html2canvas(card,{scale:sc,useCORS:true,backgroundColor:null,logging:false,onclone:d=>{
+      d.querySelectorAll(".inv .nm").forEach((el,i)=>{const n=nameImgs[i];if(n)el.innerHTML=`<img src="${n.src}" style="display:block;width:${n.w}px;height:${n.h}px">`});
+      d.querySelectorAll(".inv .et span").forEach(e=>e.style.lineHeight="1.3")}});
+    const {jsPDF}=window.jspdf;
+    const w=150,h=w*canvas.height/canvas.width;                     /* format de la carte, en mm */
+    const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:[w,h]});
+    pdf.addImage(canvas.toDataURL("image/jpeg",.92),"JPEG",0,0,w,h);
+    pdf.setProperties({title:"Invitation — Jaelle & Joursaint",subject:"Invitation au mariage",author:"Neos Nteke"});
+    const nom=($("#invGuest").textContent||"invite").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase();
+    pdf.save("invitation-jaelle-joursaint-"+(nom||"invite")+".pdf");
+    toast("Votre invitation est téléchargée ✓");
+  }catch(e){console.error(e);toast("Téléchargement impossible, nouvel essai en mode impression…");setTimeout(()=>print(),700)}
+  finally{busy=false;btn.disabled=false;btn.innerHTML=old}
+}
 function downloadInvite(){
   /* l'invité a déjà répondu au RSVP : il peut télécharger directement */
-  if(store.get("rsvp",null)){$("#needBox").hidden=true;fillInvite();toast("Choisissez « Enregistrer en PDF »");setTimeout(()=>print(),500);return}
+  if(store.get("rsvp",null)){$("#needBox").hidden=true;makePdf();return}
   const miss=checkForm();
   if(miss.length){$("#needBox").hidden=false;$("#needModal").classList.add("on");return}
-  $("#needBox").hidden=true;fillInvite();toast("Choisissez « Enregistrer en PDF »");setTimeout(()=>print(),500);
+  $("#needBox").hidden=true;makePdf();
 }
 /* réponse déjà donnée : on remet les informations dans le formulaire */
 (function(){const r=store.get("rsvp",null);if(!r)return;
